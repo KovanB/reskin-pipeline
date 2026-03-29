@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "reskin-pipeline"
+version = "0.1.0"
+description = "Offline AI reskin pipeline for Unreal Engine assets"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "pillow>=10.0",
+    "pyyaml>=6.0",
+    "httpx>=0.25",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+local = ["diffusers>=0.25", "torch>=2.0", "transformers>=4.36"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "pydantic>=2.0"]
+
+[project.scripts]
+reskin = "reskin.cli:cli"
+
+[tool.setuptools.packages.find]
+include = ["reskin*"]

@@ -1,0 +1,44 @@
+# Example reskin configuration
+name: "CyberpunkNeon"
+style_prompt: "cyberpunk neon aesthetic, glowing edges, dark background with vibrant pink and cyan accents, futuristic sci-fi style"
+author: "ReskinStudio"
+description: "Transforms assets into a cyberpunk neon visual style"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+# Paths (relative to this config file, or absolute)
+ue_project_path: "../MyUnrealProject"
+output_dir: "../output/cyberpunk_neon"
+
+# Style reference images (optional — improves consistency)
+style_reference_images:
+  - "./references/cyberpunk_ref_01.png"
+  - "./references/cyberpunk_ref_02.png"
+
+# Which AI backend to use: lucy, stability, comfyui, local
+backend: "local"
+
+# API credentials (for lucy or stability backends)
+# api_key: "sk-..."
+# api_url: "https://api.decart.ai/v1"
+
+# For ComfyUI backend
+# comfyui_workflow: "./workflows/img2img_restyle.json"
+
+# Which asset categories to reskin
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+# Generation quality settings
+quality:
+  strength: 0.75       # 0=keep original, 1=full restyle
+  guidance_scale: 7.5
+  steps: 30
+  output_format: "png"  # png or tga
+  preserve_pbr: true    # keep original normal/roughness/metallic maps
+  tile_seam_fix: true   # fix seams on tiling textures
+  consistency_pass: true # harmonize colors across related assets

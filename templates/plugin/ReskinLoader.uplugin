@@ -1,0 +1,19 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "${skin_version}",
+    "FriendlyName": "${skin_name} Reskin",
+    "Description": "${skin_description}",
+    "Category": "Reskin",
+    "CreatedBy": "${author}",
+    "CanContainContent": true,
+    "IsBetaVersion": false,
+    "Installed": true,
+    "Modules": [
+        {
+            "Name": "ReskinLoader",
+            "Type": "Runtime",
+            "LoadingPhase": "PostDefault"
+        }
+    ]
+}
