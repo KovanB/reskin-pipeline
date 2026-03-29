@@ -49,7 +49,7 @@ class LucyBackend(GeneratorBackend):
     def __init__(self, config: SkinConfig):
         super().__init__(config)
         self.api_url = config.api_url or "https://api.decart.ai/v1"
-        self.api_key = config.api_key
+        self.api_key = config.api_key.strip() if config.api_key else None
         if not self.api_key:
             raise ValueError("Lucy backend requires api_key in config")
 
