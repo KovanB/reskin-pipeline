@@ -349,6 +349,152 @@ async def api_list_assets(job_id: str) -> dict:
     return {"assets": result, "total": len(result)}
 
 
+@app.get("/api/gallery")
+async def api_gallery(
+    name: str = "DemoSkin",
+    style_prompt: str = "cyberpunk neon aesthetic, glowing edges, dark background with vibrant pink and cyan accents",
+    backend: str = "lucy",
+    strength: float = 0.75,
+):
+    """
+    Self-contained streaming HTML gallery.
+    Runs the full pipeline and streams a before/after gallery page as it goes.
+    Everything in one request — no /tmp persistence needed.
+    """
+    import base64
+    import io
+    import yaml
+
+    async def stream_gallery():
+        # HTML header
+        yield """<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reskin Gallery — """ + name + """</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,-apple-system,sans-serif;background:#0a0a0f;color:#e4e4ef;padding:24px}
+h1{font-size:24px;margin-bottom:4px}
+.subtitle{color:#8888a0;font-size:14px;margin-bottom:24px}
+.status{padding:12px 20px;border-radius:8px;margin-bottom:24px;font-size:14px;background:rgba(124,92,252,0.15);color:#7c5cfc}
+.status.done{background:rgba(52,211,153,0.15);color:#34d399}
+.status.error{background:rgba(248,113,113,0.15);color:#f87171}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;overflow:hidden}
+.card-title{padding:10px 14px;font-size:13px;font-weight:600;border-bottom:1px solid #2a2a3a;display:flex;justify-content:space-between}
+.card-title span{color:#8888a0;font-weight:400}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.compare img{width:100%;display:block}
+.label{position:absolute;top:6px;left:6px;padding:2px 8px;background:rgba(0,0,0,0.7);border-radius:4px;font-size:11px;font-weight:600}
+.side{position:relative}
+.accent{color:#7c5cfc}
+</style></head><body>
+<h1>""" + name + """</h1>
+<p class="subtitle">""" + style_prompt + """</p>
+<div id="status" class="status">Starting pipeline...</div>
+<div class="grid" id="grid"></div>
+<script>
+function setStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + (cls || '');
+}
+function addCard(name, origB64, genB64, w, h) {
+  const grid = document.getElementById('grid');
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<div class="card-title">' + name + ' <span>' + w + 'x' + h + '</span></div>'
+    + '<div class="compare">'
+    + '<div class="side"><div class="label">Before</div><img src="data:image/png;base64,' + origB64 + '"></div>'
+    + '<div class="side"><div class="label accent">After</div><img src="data:image/png;base64,' + genB64 + '"></div>'
+    + '</div>';
+  grid.appendChild(card);
+}
+</script>
+"""
+
+        yield '<script>setStatus("Generating demo characters...")</script>\n'
+
+        # Generate demo project
+        demo_dir = _ensure_demo_project()
+
+        # Build config
+        job_dir = DATA_ROOT / "gallery_job"
+        job_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = job_dir / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        api_key = os.environ.get("LUCY_API_KEY", "")
+        config_data = {
+            "name": name,
+            "style_prompt": style_prompt,
+            "backend": backend,
+            "ue_project_path": str(demo_dir),
+            "output_dir": str(output_dir),
+            "categories": ["textures"],
+            "quality": {"strength": strength, "guidance_scale": 7.5, "steps": 30,
+                        "preserve_pbr": True, "tile_seam_fix": True, "consistency_pass": False},
+        }
+        if api_key:
+            config_data["api_key"] = api_key
+
+        config_path = job_dir / "config.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(config_data, f)
+
+        from reskin.config import load_config
+        config = load_config(config_path)
+
+        yield '<script>setStatus("Extracting assets...")</script>\n'
+
+        from reskin.extractor import extract as run_extract
+        manifest_path = await asyncio.to_thread(run_extract, config)
+
+        from reskin.utils import load_json
+        manifest = load_json(manifest_path)
+        assets = manifest["assets"]
+        total = len(assets)
+
+        yield f'<script>setStatus("Reskinning {total} assets with Lucy...")</script>\n'
+
+        # Generate each asset and stream the before/after card immediately
+        from reskin.generator import get_backend
+        from reskin.utils import load_image
+
+        gen_backend = get_backend(config)
+        style_refs = []
+
+        def img_to_b64(img):
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="PNG")
+            return base64.b64encode(buf.getvalue()).decode()
+
+        for i, asset in enumerate(assets):
+            rel = asset["relative_path"]
+            src_path = Path(asset["extracted_path"])
+
+            yield f'<script>setStatus("Reskinning ({i+1}/{total}): {rel}...")</script>\n'
+
+            try:
+                source = load_image(src_path)
+                orig_b64 = img_to_b64(source)
+
+                result = await asyncio.to_thread(
+                    gen_backend.generate, source, style_prompt, style_refs, asset
+                )
+                gen_b64 = img_to_b64(result)
+
+                safe_name = rel.replace("\\\\", "/").replace("'", "\\\\'")
+                yield f"<script>addCard('{safe_name}','{orig_b64}','{gen_b64}',{asset['width']},{asset['height']})</script>\n"
+
+            except Exception as e:
+                yield f'<script>setStatus("Error on {rel}: {e}", "error")</script>\n'
+
+        yield f'<script>setStatus("Done! {total} assets reskinned.", "done")</script>\n'
+        yield '</body></html>'
+
+    return StreamingResponse(stream_gallery(), media_type="text/html")
+
+
 # ──────────────────────────────── WebSocket ────────────────────────────────
 
 
