@@ -35,14 +35,124 @@ DATA_ROOT.mkdir(parents=True, exist_ok=True)
 (DATA_ROOT / "uploads").mkdir(parents=True, exist_ok=True)
 
 
+def _ensure_demo_project() -> Path:
+    """Unpack bundled demo character textures to /tmp if not already there."""
+    demo_dir = DATA_ROOT / "demo_project"
+    content_dir = demo_dir / "Content" / "Characters"
+    if content_dir.exists():
+        return demo_dir
+
+    from PIL import Image, ImageDraw
+
+    def hex_to_rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+    chars = {
+        "Knight": {"body": "#4a5568", "accent": "#c0a050", "trim": "#2d3748"},
+        "Mage": {"body": "#4c1d95", "accent": "#a78bfa", "trim": "#1e1b4b"},
+        "Rogue": {"body": "#1a1a2e", "accent": "#e94560", "trim": "#16213e"},
+        "Ranger": {"body": "#2d5016", "accent": "#84cc16", "trim": "#1a2e05"},
+        "Cleric": {"body": "#f5f5dc", "accent": "#daa520", "trim": "#8b7355"},
+    }
+
+    for name, pal in chars.items():
+        char_dir = content_dir / name
+        char_dir.mkdir(parents=True, exist_ok=True)
+        body_c, acc_c, trim_c = hex_to_rgb(pal["body"]), hex_to_rgb(pal["accent"]), hex_to_rgb(pal["trim"])
+
+        # Body
+        img = Image.new("RGB", (512, 512), body_c)
+        d = ImageDraw.Draw(img)
+        for y in range(0, 512, 64):
+            d.line([(0, y), (512, y)], fill=trim_c, width=2)
+        for x in range(0, 512, 64):
+            d.line([(x, 0), (x, 512)], fill=trim_c, width=2)
+        d.rectangle([180, 200, 332, 312], fill=acc_c, outline=trim_c, width=3)
+        d.ellipse([220, 220, 292, 292], fill=trim_c, outline=acc_c, width=2)
+        img.save(str(char_dir / f"{name}_Body.png"))
+
+        # Face
+        face = Image.new("RGB", (256, 256), (232, 201, 160))
+        fd = ImageDraw.Draw(face)
+        fd.ellipse([40, 20, 216, 236], fill=(219, 184, 150), outline=(184, 149, 106), width=2)
+        fd.ellipse([80, 90, 110, 115], fill="white", outline="#333")
+        fd.ellipse([146, 90, 176, 115], fill="white", outline="#333")
+        fd.ellipse([90, 96, 104, 110], fill="#333")
+        fd.ellipse([156, 96, 170, 110], fill="#333")
+        fd.arc([100, 140, 156, 175], 0, 180, fill=(139, 94, 60), width=2)
+        fd.rectangle([30, 0, 226, 30], fill=acc_c, outline=trim_c, width=2)
+        face.save(str(char_dir / f"{name}_Face.png"))
+
+        # Arms
+        arms = Image.new("RGB", (256, 512), body_c)
+        ad = ImageDraw.Draw(arms)
+        ad.rectangle([0, 0, 256, 256], outline=trim_c, width=3)
+        ad.rectangle([0, 256, 256, 512], outline=trim_c, width=3)
+        ad.rectangle([20, 200, 236, 256], fill=acc_c, outline=trim_c, width=2)
+        ad.rectangle([20, 456, 236, 512], fill=acc_c, outline=trim_c, width=2)
+        arms.save(str(char_dir / f"{name}_Arms.png"))
+
+        # Legs
+        legs = Image.new("RGB", (256, 512), body_c)
+        ld = ImageDraw.Draw(legs)
+        ld.rectangle([0, 380, 128, 512], fill=trim_c, outline=acc_c, width=2)
+        ld.rectangle([128, 380, 256, 512], fill=trim_c, outline=acc_c, width=2)
+        ld.ellipse([30, 230, 98, 280], fill=acc_c, outline=trim_c, width=2)
+        ld.ellipse([158, 230, 226, 280], fill=acc_c, outline=trim_c, width=2)
+        legs.save(str(char_dir / f"{name}_Legs.png"))
+
+        # Weapon
+        wep = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+        wd = ImageDraw.Draw(wep)
+        if name == "Knight":
+            wd.rectangle([110, 10, 146, 200], fill=(136, 136, 136), outline=(85, 85, 85), width=2)
+            wd.rectangle([80, 190, 176, 210], fill=acc_c, outline=trim_c, width=2)
+        elif name == "Mage":
+            wd.rectangle([120, 30, 136, 220], fill=(101, 67, 33))
+            wd.ellipse([96, 0, 160, 64], fill=acc_c, outline=trim_c, width=3)
+        elif name == "Rogue":
+            wd.polygon([(128, 10), (160, 180), (128, 170), (96, 180)], fill=(170, 170, 170))
+            wd.rectangle([108, 175, 148, 195], fill=acc_c)
+        elif name == "Ranger":
+            wd.arc([60, 20, 196, 240], 200, 340, fill=(101, 67, 33), width=6)
+        elif name == "Cleric":
+            wd.rectangle([118, 60, 138, 256], fill=acc_c, outline=trim_c, width=2)
+            wd.rectangle([80, 30, 176, 70], fill=acc_c, outline=trim_c, width=2)
+        wep.save(str(char_dir / f"{name}_Weapon.png"))
+
+    return demo_dir
+
+
+@app.get("/api/demo/characters")
+async def api_demo_characters() -> dict:
+    """List the 5 bundled demo characters and their textures."""
+    _ensure_demo_project()
+    characters = ["Knight", "Mage", "Rogue", "Cleric", "Ranger"]
+    textures = ["Body", "Face", "Arms", "Legs", "Weapon"]
+    return {
+        "characters": characters,
+        "textures_per_character": textures,
+        "total_assets": len(characters) * len(textures),
+        "project_path": "demo",
+    }
+
+
 # ──────────────────────────────── REST endpoints ────────────────────────────────
 
 
 @app.post("/api/jobs")
 async def api_create_job(req: CreateJobRequest, ue_project_path: str = "") -> dict:
     """Create a new reskin job and start it."""
-    if not ue_project_path:
-        raise HTTPException(400, "ue_project_path query param required")
+    # Use bundled demo project if no path provided
+    if not ue_project_path or ue_project_path == "demo":
+        ue_project_path = str(_ensure_demo_project())
+
+    # Inject Lucy API key from env if not provided in request
+    if req.backend.value == "lucy" and not req.api_key:
+        env_key = os.environ.get("LUCY_API_KEY")
+        if env_key:
+            req.api_key = env_key
 
     job = create_job(req, ue_project_path)
     # Fire and forget the pipeline

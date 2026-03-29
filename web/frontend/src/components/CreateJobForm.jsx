@@ -2,27 +2,29 @@ import { useState } from "react";
 import { createJob, uploadProject } from "../hooks/useApi";
 
 const BACKENDS = [
+  { value: "lucy", label: "Decart Lucy (Recommended)" },
   { value: "local", label: "Local Diffusion (SDXL-Turbo)" },
-  { value: "lucy", label: "Decart Lucy" },
   { value: "stability", label: "Stability AI" },
   { value: "comfyui", label: "ComfyUI (Local Server)" },
 ];
 
 const CATEGORIES = ["textures", "ui", "skyboxes", "particles", "materials"];
 
+const DEMO_CHARACTERS = ["Knight", "Mage", "Rogue", "Ranger", "Cleric"];
+
 export default function CreateJobForm({ onCreated }) {
   const [form, setForm] = useState({
     name: "",
     style_prompt: "",
-    backend: "local",
+    backend: "lucy",
     categories: [...CATEGORIES],
     author: "",
     description: "",
     api_key: "",
     quality: { strength: 0.75, guidance_scale: 7.5, steps: 30, preserve_pbr: true, tile_seam_fix: true, consistency_pass: true },
   });
-  const [projectPath, setProjectPath] = useState("");
-  const [projectFile, setProjectFile] = useState(null);
+  const [projectPath, setProjectPath] = useState("demo");
+  const [useDemo, setUseDemo] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -38,11 +40,11 @@ export default function CreateJobForm({ onCreated }) {
   };
 
   const handleUpload = async (file) => {
-    setProjectFile(file);
     setUploading(true);
     try {
       const result = await uploadProject(file);
       setProjectPath(result.project_path);
+      setUseDemo(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -55,7 +57,7 @@ export default function CreateJobForm({ onCreated }) {
     setError(null);
     setSubmitting(true);
     try {
-      const job = await createJob(form, projectPath);
+      const job = await createJob(form, useDemo ? "demo" : projectPath);
       onCreated(job);
     } catch (e) {
       setError(e.message);
@@ -64,7 +66,7 @@ export default function CreateJobForm({ onCreated }) {
     }
   };
 
-  const needsApiKey = form.backend === "lucy" || form.backend === "stability";
+  const needsApiKey = form.backend === "stability";
 
   return (
     <form onSubmit={handleSubmit} className="card">
@@ -107,25 +109,65 @@ export default function CreateJobForm({ onCreated }) {
         </div>
       )}
 
+      {/* Source project */}
       <div className="form-group">
-        <label>UE Project</label>
-        <div className="form-row">
-          <input
-            className="form-input"
-            value={projectPath}
-            onChange={(e) => setProjectPath(e.target.value)}
-            placeholder="C:/Users/.../MyProject or upload zip"
-          />
-          <label className="btn btn-secondary" style={{ justifyContent: "center" }}>
-            {uploading ? "Uploading..." : "Upload .zip"}
-            <input
-              type="file"
-              accept=".zip"
-              style={{ display: "none" }}
-              onChange={(e) => e.target.files[0] && handleUpload(e.target.files[0])}
-            />
-          </label>
+        <label>Source Characters</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            className={`btn ${useDemo ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => { setUseDemo(true); setProjectPath("demo"); }}
+          >
+            Demo Characters (5 built-in)
+          </button>
+          <button
+            type="button"
+            className={`btn ${!useDemo ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setUseDemo(false)}
+          >
+            Upload Custom
+          </button>
         </div>
+
+        {useDemo ? (
+          <div style={{ background: "var(--bg-input)", borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10 }}>
+              5 characters with Body, Face, Arms, Legs, and Weapon textures each (25 total assets):
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {DEMO_CHARACTERS.map((c) => (
+                <span key={c} style={{
+                  padding: "4px 12px",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="form-row">
+            <input
+              className="form-input"
+              value={projectPath === "demo" ? "" : projectPath}
+              onChange={(e) => setProjectPath(e.target.value)}
+              placeholder="Path to UE project or upload zip"
+            />
+            <label className="btn btn-secondary" style={{ justifyContent: "center" }}>
+              {uploading ? "Uploading..." : "Upload .zip"}
+              <input
+                type="file"
+                accept=".zip"
+                style={{ display: "none" }}
+                onChange={(e) => e.target.files[0] && handleUpload(e.target.files[0])}
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="form-group">
@@ -192,7 +234,7 @@ export default function CreateJobForm({ onCreated }) {
       </div>
 
       <div style={{ marginTop: 20 }}>
-        <button type="submit" className="btn btn-primary" disabled={submitting || !form.name || !form.style_prompt || !projectPath}>
+        <button type="submit" className="btn btn-primary" disabled={submitting || !form.name || !form.style_prompt}>
           {submitting ? "Creating..." : "Start Reskin Job"}
         </button>
       </div>
