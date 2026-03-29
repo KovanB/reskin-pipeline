@@ -43,15 +43,22 @@ export function uploadProject(file) {
 }
 
 export function connectJobWS(jobId, onMessage) {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsBase = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}`;
-  const ws = new WebSocket(`${wsBase}/ws/jobs/${jobId}`);
+  // Vercel serverless doesn't support WebSockets — poll instead
+  let active = true;
 
-  ws.onmessage = (event) => {
-    onMessage(JSON.parse(event.data));
+  const poll = async () => {
+    while (active) {
+      try {
+        const job = await apiFetch(`/api/jobs/${jobId}`);
+        if (job.progress) onMessage(job.progress);
+        if (job.progress?.status === "completed" || job.progress?.status === "failed") break;
+      } catch (e) {
+        console.error("Poll error:", e);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   };
 
-  ws.onerror = (err) => console.error("WS error:", err);
-
-  return () => ws.close();
+  poll();
+  return () => { active = false; };
 }
