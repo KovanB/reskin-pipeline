@@ -42,10 +42,52 @@ export function uploadProject(file) {
   );
 }
 
-export function connectJobWS(jobId, onMessage) {
-  // Vercel serverless doesn't support WebSockets — poll instead
+export function connectJobSSE(jobId, onMessage) {
+  /**
+   * Connect to the SSE /run endpoint which actually executes the pipeline
+   * and streams progress events back. The connection stays alive until done.
+   */
   let active = true;
 
+  const run = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/jobs/${jobId}/run`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (active) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop(); // keep incomplete chunk
+
+        for (const line of lines) {
+          const match = line.match(/^data:\s*(.+)$/m);
+          if (match) {
+            try {
+              onMessage(JSON.parse(match[1]));
+            } catch (e) {
+              console.error("SSE parse error:", e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("SSE error:", e);
+      onMessage({ status: "failed", message: `Connection error: ${e.message}` });
+    }
+  };
+
+  run();
+  return () => { active = false; };
+}
+
+// Keep the old polling as a fallback for viewing completed jobs
+export function connectJobWS(jobId, onMessage) {
+  let active = true;
   const poll = async () => {
     while (active) {
       try {
@@ -58,7 +100,6 @@ export function connectJobWS(jobId, onMessage) {
       await new Promise((r) => setTimeout(r, 2000));
     }
   };
-
   poll();
   return () => { active = false; };
 }

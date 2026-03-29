@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { connectJobWS } from "../hooks/useApi";
+import { useState } from "react";
 
 const STATUS_BADGES = {
   pending: "badge-pending",
@@ -32,16 +31,9 @@ function timeAgo(dateStr) {
 }
 
 export default function JobCard({ job: initialJob, onClick }) {
-  const [job, setJob] = useState(initialJob);
+  const [job] = useState(initialJob);
   const progress = job.progress || {};
   const isRunning = !["completed", "failed", "pending"].includes(progress.status);
-
-  useEffect(() => {
-    if (!isRunning) return;
-    return connectJobWS(job.id, (update) => {
-      setJob((j) => ({ ...j, progress: update, status: update.status }));
-    });
-  }, [job.id, isRunning]);
 
   return (
     <div className="card" style={{ cursor: "pointer" }} onClick={() => onClick(job)}>

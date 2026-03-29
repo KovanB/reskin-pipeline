@@ -13,8 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .jobs import create_job, get_job, get_job_dir, list_jobs, run_job, subscribe, unsubscribe
-from .models import CreateJobRequest, JobListResponse
+from .jobs import create_job, get_job, get_job_dir, list_jobs, subscribe, unsubscribe
+from .models import CreateJobRequest, JobListResponse, JobProgress, JobStatus
 
 app = FastAPI(title="Reskin Pipeline", version="0.1.0")
 
@@ -143,21 +143,101 @@ async def api_demo_characters() -> dict:
 
 @app.post("/api/jobs")
 async def api_create_job(req: CreateJobRequest, ue_project_path: str = "") -> dict:
-    """Create a new reskin job and start it."""
-    # Use bundled demo project if no path provided
+    """Create a new reskin job (does not start it — use /api/jobs/{id}/run SSE endpoint)."""
     if not ue_project_path or ue_project_path == "demo":
         ue_project_path = str(_ensure_demo_project())
 
-    # Inject Lucy API key from env if not provided in request
     if req.backend.value == "lucy" and not req.api_key:
         env_key = os.environ.get("LUCY_API_KEY")
         if env_key:
             req.api_key = env_key
 
     job = create_job(req, ue_project_path)
-    # Fire and forget the pipeline
-    asyncio.create_task(run_job(job.id))
     return job.model_dump()
+
+
+@app.get("/api/jobs/{job_id}/run")
+async def api_run_job(job_id: str):
+    """Run the full pipeline as a streaming SSE response. Keeps connection alive."""
+    import yaml
+    from .jobs import _jobs, _now
+
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    async def run_pipeline():
+        job_dir = get_job_dir(job_id)
+        output_dir = job_dir / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        config_data = {
+            "name": job["name"],
+            "style_prompt": job["style_prompt"],
+            "backend": job["backend"],
+            "ue_project_path": job["ue_project_path"],
+            "output_dir": str(output_dir),
+            "categories": job["categories"],
+            "quality": job["quality"],
+            "author": job["author"],
+            "description": job["description"],
+        }
+        if job.get("api_key"):
+            config_data["api_key"] = job["api_key"]
+
+        config_path = job_dir / "config.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(config_data, f)
+
+        def send_event(status, stage, message, current=0, total=0):
+            pct = (current / total * 100) if total > 0 else 0
+            progress = {"status": status, "stage": stage, "message": message,
+                        "current": current, "total": total, "percent": round(pct, 1)}
+            job["progress"] = JobProgress(**progress)
+            job["updated_at"] = _now()
+            return f"data: {json.dumps(progress)}\n\n"
+
+        try:
+            from reskin.config import load_config
+            config = load_config(config_path)
+
+            yield send_event("extracting", "extract", "Scanning project...")
+
+            from reskin.extractor import extract as run_extract
+            manifest_path = await asyncio.to_thread(run_extract, config)
+
+            from reskin.utils import load_json
+            manifest = load_json(manifest_path)
+            total = manifest["total_assets"]
+            job["asset_count"] = total
+
+            yield send_event("generating", "generate", f"Generating {total} assets with Lucy...", 0, total)
+
+            from reskin.generator import generate as run_generate
+            await asyncio.to_thread(run_generate, config)
+
+            yield send_event("baking", "bake", "Baking textures...", total, total)
+
+            from reskin.baker import bake as run_bake
+            await asyncio.to_thread(run_bake, config)
+
+            if config.quality.consistency_pass:
+                yield send_event("baking", "consistency", "Running consistency pass...", total, total)
+                from reskin.consistency import consistency_pass
+                await asyncio.to_thread(consistency_pass, config)
+
+            yield send_event("packaging", "package", "Building UE plugin...", total, total)
+
+            from reskin.packager import package as run_package
+            await asyncio.to_thread(run_package, config)
+
+            yield send_event("completed", "done", "Skin ready for download!", total, total)
+
+        except Exception as e:
+            job["error"] = str(e)
+            yield send_event("failed", "error", f"Pipeline failed: {e}")
+
+    return StreamingResponse(run_pipeline(), media_type="text/event-stream")
 
 
 @app.get("/api/jobs")

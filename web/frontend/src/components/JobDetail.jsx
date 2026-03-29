@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getJob, getJobAssets, connectJobWS } from "../hooks/useApi";
+import { useEffect, useState, useRef } from "react";
+import { getJob, getJobAssets, connectJobSSE } from "../hooks/useApi";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -8,25 +8,24 @@ export default function JobDetail({ jobId, onBack }) {
   const [assets, setAssets] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [tab, setTab] = useState("preview");
+  const sseStarted = useRef(false);
 
   useEffect(() => {
-    getJob(jobId).then(setJob);
-    getJobAssets(jobId).then((r) => setAssets(r.assets || [])).catch(() => {});
-  }, [jobId]);
-
-  useEffect(() => {
-    if (!job) return;
-    const isRunning = !["completed", "failed", "pending"].includes(job.progress?.status);
-    if (!isRunning) return;
-
-    return connectJobWS(jobId, (update) => {
-      setJob((j) => ({ ...j, progress: update, status: update.status }));
-      // Refresh assets when status changes
-      if (update.status === "completed" || update.status === "baking") {
-        getJobAssets(jobId).then((r) => setAssets(r.assets || [])).catch(() => {});
+    getJob(jobId).then((j) => {
+      setJob(j);
+      // Auto-start pipeline via SSE if job is pending
+      if (j.progress?.status === "pending" && !sseStarted.current) {
+        sseStarted.current = true;
+        connectJobSSE(jobId, (update) => {
+          setJob((prev) => ({ ...prev, progress: update, status: update.status }));
+          if (update.status === "completed" || update.status === "baking") {
+            getJobAssets(jobId).then((r) => setAssets(r.assets || [])).catch(() => {});
+          }
+        });
       }
     });
-  }, [jobId, job?.progress?.status]);
+    getJobAssets(jobId).then((r) => setAssets(r.assets || [])).catch(() => {});
+  }, [jobId]);
 
   if (!job) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>;
 
