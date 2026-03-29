@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .jobs import create_job, get_job, get_job_dir, list_jobs, subscribe, unsubscribe
@@ -350,84 +350,323 @@ async def api_list_assets(job_id: str) -> dict:
 
 
 @app.get("/api/gallery")
-async def api_gallery(
-    name: str = "DemoSkin",
-    style_prompt: str = "cyberpunk neon aesthetic, glowing edges, dark background with vibrant pink and cyan accents",
-    backend: str = "lucy",
+async def api_gallery():
+    """Landing page — pick a character, enter a style, Lucy reskins it live."""
+    import base64
+    import io
+
+    # Pre-generate demo characters and build base64 thumbnails for the picker
+    demo_dir = _ensure_demo_project()
+    content_dir = demo_dir / "Content" / "Characters"
+
+    chars = {}
+    for char_dir in sorted(content_dir.iterdir()):
+        if not char_dir.is_dir():
+            continue
+        name = char_dir.name
+        body_path = char_dir / f"{name}_Body.png"
+        if body_path.exists():
+            from PIL import Image as PILImage
+            img = PILImage.open(body_path).convert("RGB").resize((128, 128), PILImage.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            chars[name] = base64.b64encode(buf.getvalue()).decode()
+
+    # Build character cards HTML
+    char_cards = ""
+    for name, thumb in chars.items():
+        char_cards += f'''<div class="char-card" data-name="{name}" onclick="selectChar('{name}')">
+<img src="data:image/png;base64,{thumb}">
+<div class="char-name">{name}</div>
+<div class="char-parts">Body / Face / Arms / Legs / Weapon</div>
+</div>'''
+
+    style_presets_html = ""
+    presets = [
+        ("Cyberpunk Neon", "cyberpunk neon aesthetic, glowing edges, dark background with vibrant pink and cyan accents, holographic shimmer"),
+        ("Dark Souls", "dark medieval fantasy, weathered and battle-scarred, muted earth tones, grim atmosphere, souls-like aesthetic"),
+        ("Cel Shaded", "cel-shaded cartoon style, bold black outlines, flat vibrant colors, anime inspired, Borderlands aesthetic"),
+        ("Ice Frost", "frozen ice crystal aesthetic, pale blue and white, frost patterns, translucent icy surfaces, arctic winter"),
+        ("Lava Infernal", "molten lava and fire, glowing orange cracks, charred black surface, ember particles, volcanic demon"),
+        ("Vaporwave", "vaporwave aesthetic, pastel pink and purple, chrome reflections, retro 80s, sunset gradients, glitch art"),
+    ]
+    for pname, prompt in presets:
+        style_presets_html += f'<button class="preset-btn" onclick="selectPreset(this)" data-prompt="{prompt}">{pname}</button>'
+
+    html = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reskin Pipeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:#08080d;color:#e4e4ef;min-height:100vh}
+.container{max-width:1100px;margin:0 auto;padding:32px 24px}
+.logo{font-size:22px;font-weight:700;margin-bottom:32px;letter-spacing:-0.5px}
+.logo span{color:#7c5cfc}
+
+/* Steps */
+.step{margin-bottom:32px;display:none}
+.step.active{display:block}
+.step-label{font-size:12px;font-weight:600;text-transform:uppercase;color:#7c5cfc;letter-spacing:1px;margin-bottom:12px}
+.step-title{font-size:20px;font-weight:600;margin-bottom:16px}
+
+/* Character picker */
+.char-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+.char-card{background:#12121a;border:2px solid #1e1e2e;border-radius:12px;padding:12px;cursor:pointer;transition:all 0.2s;text-align:center}
+.char-card:hover{border-color:#7c5cfc;transform:translateY(-2px)}
+.char-card.selected{border-color:#7c5cfc;background:#1a1a2e;box-shadow:0 0 20px rgba(124,92,252,0.2)}
+.char-card img{width:100%;border-radius:8px;margin-bottom:8px}
+.char-name{font-weight:600;font-size:15px}
+.char-parts{font-size:11px;color:#6b6b80;margin-top:2px}
+
+/* Style input */
+.style-area{margin-top:20px}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.preset-btn{padding:8px 16px;border-radius:20px;border:1px solid #2a2a3a;background:#12121a;color:#b0b0c0;font-size:13px;cursor:pointer;transition:all 0.2s}
+.preset-btn:hover{border-color:#7c5cfc;color:#e4e4ef}
+.preset-btn.active{background:#7c5cfc;border-color:#7c5cfc;color:white}
+textarea{width:100%;padding:14px;background:#12121a;border:1px solid #2a2a3a;border-radius:10px;color:#e4e4ef;font-size:14px;font-family:inherit;resize:vertical;min-height:70px}
+textarea:focus{outline:none;border-color:#7c5cfc}
+
+/* Strength slider */
+.slider-row{display:flex;align-items:center;gap:12px;margin-top:12px}
+.slider-row label{font-size:13px;color:#8888a0;min-width:70px}
+.slider-row input[type=range]{flex:1;accent-color:#7c5cfc}
+.slider-val{font-size:13px;color:#7c5cfc;min-width:32px;text-align:right}
+
+/* Go button */
+.go-btn{margin-top:20px;padding:14px 40px;border-radius:10px;border:none;background:#7c5cfc;color:white;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.go-btn:hover{background:#9b7fff;transform:translateY(-1px)}
+.go-btn:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+
+/* Status bar */
+.status-bar{padding:14px 20px;border-radius:10px;margin-bottom:24px;font-size:14px;display:none;animation:fadeIn 0.3s}
+.status-bar.show{display:flex;align-items:center;gap:12px}
+.status-bar.running{background:rgba(124,92,252,0.12);color:#a78bfa}
+.status-bar.done{background:rgba(52,211,153,0.12);color:#34d399}
+.status-bar.error{background:rgba(248,113,113,0.12);color:#f87171}
+.spinner{width:18px;height:18px;border:2px solid transparent;border-top-color:currentColor;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* Progress */
+.progress{width:100%;height:4px;background:#1a1a26;border-radius:2px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:#7c5cfc;border-radius:2px;transition:width 0.4s ease;width:0%}
+
+/* Results grid */
+.results{display:none}
+.results.show{display:block}
+.results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.results-title{font-size:18px;font-weight:600}
+.char-section{margin-bottom:28px}
+.char-section-title{font-size:15px;font-weight:600;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #1e1e2e}
+.tex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.tex-card{background:#12121a;border:1px solid #1e1e2e;border-radius:10px;overflow:hidden;animation:fadeIn 0.4s}
+.tex-title{padding:8px 12px;font-size:12px;font-weight:600;border-bottom:1px solid #1e1e2e;display:flex;justify-content:space-between}
+.tex-title span{color:#6b6b80;font-weight:400}
+.compare{display:grid;grid-template-columns:1fr 1fr}
+.compare img{width:100%;display:block}
+.side{position:relative}
+.label{position:absolute;top:6px;left:6px;padding:2px 8px;background:rgba(0,0,0,0.75);border-radius:4px;font-size:10px;font-weight:600;letter-spacing:0.5px;text-transform:uppercase}
+.label.after{color:#7c5cfc}
+
+/* Download */
+.dl-btn{padding:10px 24px;border-radius:8px;border:none;background:#34d399;color:#0a0a0f;font-size:13px;font-weight:600;cursor:pointer;display:none}
+.dl-btn.show{display:inline-flex;align-items:center;gap:6px}
+
+/* Back */
+.back-btn{padding:8px 16px;border-radius:8px;border:1px solid #2a2a3a;background:transparent;color:#8888a0;font-size:13px;cursor:pointer;margin-bottom:20px;display:none}
+.back-btn.show{display:inline-block}
+</style></head><body>
+<div class="container">
+<div class="logo">reskin<span>.pipeline</span></div>
+
+<button class="back-btn" id="backBtn" onclick="goBack()">Back to characters</button>
+
+<div id="status" class="status-bar"></div>
+
+<!-- Step 1: Pick a character -->
+<div class="step active" id="step1">
+<div class="step-label">Step 1</div>
+<div class="step-title">Pick a character</div>
+<div class="char-grid">""" + char_cards + """</div>
+</div>
+
+<!-- Step 2: Style -->
+<div class="step" id="step2">
+<div class="step-label">Step 2</div>
+<div class="step-title" id="styleTitle">Style your character</div>
+<div class="style-area">
+<div style="font-size:13px;color:#8888a0;margin-bottom:8px">Quick presets</div>
+<div class="presets">""" + style_presets_html + """</div>
+<div style="font-size:13px;color:#8888a0;margin:12px 0 6px">Or describe your own style</div>
+<textarea id="promptInput" placeholder="Describe the visual style you want..."></textarea>
+<div class="slider-row">
+<label>Strength</label>
+<input type="range" id="strengthSlider" min="0" max="1" step="0.05" value="0.75">
+<span class="slider-val" id="strengthVal">0.75</span>
+</div>
+<button class="go-btn" id="goBtn" onclick="startReskin()" disabled>Reskin with Lucy</button>
+</div>
+</div>
+
+<!-- Results -->
+<div class="results" id="results">
+<div class="results-header">
+<div class="results-title" id="resultsTitle">Results</div>
+</div>
+<div id="resultsGrid"></div>
+</div>
+
+</div>
+<script>
+let selectedChar = null;
+
+function selectChar(name) {
+  selectedChar = name;
+  document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+  document.querySelector('[data-name="'+name+'"]').classList.add('selected');
+  document.getElementById('step2').classList.add('active');
+  document.getElementById('styleTitle').textContent = 'Style ' + name;
+  checkReady();
+}
+
+function selectPreset(btn) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('promptInput').value = btn.dataset.prompt;
+  checkReady();
+}
+
+function checkReady() {
+  const hasPrompt = document.getElementById('promptInput').value.trim().length > 0;
+  document.getElementById('goBtn').disabled = !(selectedChar && hasPrompt);
+}
+
+document.getElementById('promptInput').addEventListener('input', checkReady);
+document.getElementById('strengthSlider').addEventListener('input', function() {
+  document.getElementById('strengthVal').textContent = this.value;
+});
+
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status-bar show ' + (type || 'running');
+  if (type === 'running') {
+    el.innerHTML = '<div class="spinner"></div>' + msg;
+  }
+}
+
+function goBack() {
+  document.getElementById('step1').classList.add('active');
+  document.getElementById('step2').classList.add('active');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('status').classList.remove('show');
+  document.getElementById('backBtn').classList.remove('show');
+  document.getElementById('goBtn').disabled = false;
+}
+
+async function startReskin() {
+  const prompt = document.getElementById('promptInput').value.trim();
+  const strength = document.getElementById('strengthSlider').value;
+  document.getElementById('goBtn').disabled = true;
+  document.getElementById('step1').classList.remove('active');
+  document.getElementById('step2').classList.remove('active');
+  document.getElementById('backBtn').classList.add('show');
+  document.getElementById('results').classList.add('show');
+  document.getElementById('resultsTitle').textContent = selectedChar + ' — Reskinning...';
+  document.getElementById('resultsGrid').innerHTML = '';
+  setStatus('Starting Lucy...', 'running');
+
+  const params = new URLSearchParams({character: selectedChar, style_prompt: prompt, strength: strength});
+  try {
+    const res = await fetch('/api/reskin?' + params.toString());
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, {stream: true});
+      const parts = buf.split('\\n');
+      buf = parts.pop();
+      for (const line of parts) {
+        if (!line.trim()) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev.type === 'status') setStatus(ev.message, ev.cls || 'running');
+          if (ev.type === 'card') addCard(ev);
+          if (ev.type === 'done') {
+            setStatus(ev.message, 'done');
+            document.getElementById('resultsTitle').textContent = selectedChar + ' — ' + prompt;
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    setStatus('Connection error: ' + e.message, 'error');
+  }
+}
+
+function addCard(ev) {
+  const grid = document.getElementById('resultsGrid');
+  // Find or create character section
+  let section = document.getElementById('section-' + ev.character);
+  if (!section) {
+    section = document.createElement('div');
+    section.className = 'char-section';
+    section.id = 'section-' + ev.character;
+    section.innerHTML = '<div class="char-section-title">' + ev.character + '</div><div class="tex-grid" id="texgrid-' + ev.character + '"></div>';
+    grid.appendChild(section);
+  }
+  const texGrid = document.getElementById('texgrid-' + ev.character);
+  const card = document.createElement('div');
+  card.className = 'tex-card';
+  card.innerHTML = '<div class="tex-title">' + ev.texture + ' <span>' + ev.width + 'x' + ev.height + '</span></div>'
+    + '<div class="compare">'
+    + '<div class="side"><div class="label">Before</div><img src="data:image/png;base64,' + ev.original + '"></div>'
+    + '<div class="side"><div class="label after">After</div><img src="data:image/png;base64,' + ev.reskinned + '"></div>'
+    + '</div>';
+  texGrid.appendChild(card);
+}
+</script>
+</body></html>"""
+
+    return HTMLResponse(html)
+
+
+@app.get("/api/reskin")
+async def api_reskin(
+    character: str = "Knight",
+    style_prompt: str = "cyberpunk neon aesthetic",
     strength: float = 0.75,
 ):
     """
-    Self-contained streaming HTML gallery.
-    Runs the full pipeline and streams a before/after gallery page as it goes.
-    Everything in one request — no /tmp persistence needed.
+    Stream Lucy reskin results for a single character as newline-delimited JSON.
+    Each line is {type: "status"|"card"|"done", ...}.
     """
     import base64
     import io
     import yaml
 
-    async def stream_gallery():
-        # HTML header
-        yield """<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reskin Gallery — """ + name + """</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Inter,-apple-system,sans-serif;background:#0a0a0f;color:#e4e4ef;padding:24px}
-h1{font-size:24px;margin-bottom:4px}
-.subtitle{color:#8888a0;font-size:14px;margin-bottom:24px}
-.status{padding:12px 20px;border-radius:8px;margin-bottom:24px;font-size:14px;background:rgba(124,92,252,0.15);color:#7c5cfc}
-.status.done{background:rgba(52,211,153,0.15);color:#34d399}
-.status.error{background:rgba(248,113,113,0.15);color:#f87171}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
-.card{background:#12121a;border:1px solid #2a2a3a;border-radius:10px;overflow:hidden}
-.card-title{padding:10px 14px;font-size:13px;font-weight:600;border-bottom:1px solid #2a2a3a;display:flex;justify-content:space-between}
-.card-title span{color:#8888a0;font-weight:400}
-.compare{display:grid;grid-template-columns:1fr 1fr;gap:2px}
-.compare img{width:100%;display:block}
-.label{position:absolute;top:6px;left:6px;padding:2px 8px;background:rgba(0,0,0,0.7);border-radius:4px;font-size:11px;font-weight:600}
-.side{position:relative}
-.accent{color:#7c5cfc}
-</style></head><body>
-<h1>""" + name + """</h1>
-<p class="subtitle">""" + style_prompt + """</p>
-<div id="status" class="status">Starting pipeline...</div>
-<div class="grid" id="grid"></div>
-<script>
-function setStatus(msg, cls) {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = 'status ' + (cls || '');
-}
-function addCard(name, origB64, genB64, w, h) {
-  const grid = document.getElementById('grid');
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = '<div class="card-title">' + name + ' <span>' + w + 'x' + h + '</span></div>'
-    + '<div class="compare">'
-    + '<div class="side"><div class="label">Before</div><img src="data:image/png;base64,' + origB64 + '"></div>'
-    + '<div class="side"><div class="label accent">After</div><img src="data:image/png;base64,' + genB64 + '"></div>'
-    + '</div>';
-  grid.appendChild(card);
-}
-</script>
-"""
-
-        yield '<script>setStatus("Generating demo characters...")</script>\n'
-
-        # Generate demo project
+    async def stream_reskin():
         demo_dir = _ensure_demo_project()
+        char_dir = demo_dir / "Content" / "Characters" / character
 
-        # Build config
-        job_dir = DATA_ROOT / "gallery_job"
+        if not char_dir.exists():
+            yield json.dumps({"type": "status", "message": f"Character '{character}' not found", "cls": "error"}) + "\n"
+            return
+
+        # Set up minimal config for the generator
+        job_dir = DATA_ROOT / f"reskin_{character}"
         job_dir.mkdir(parents=True, exist_ok=True)
         output_dir = job_dir / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         api_key = os.environ.get("LUCY_API_KEY", "")
         config_data = {
-            "name": name,
+            "name": f"Reskin_{character}",
             "style_prompt": style_prompt,
-            "backend": backend,
+            "backend": "lucy",
             "ue_project_path": str(demo_dir),
             "output_dir": str(output_dir),
             "categories": ["textures"],
@@ -444,81 +683,50 @@ function addCard(name, origB64, genB64, w, h) {
         from reskin.config import load_config
         config = load_config(config_path)
 
-        yield '<script>setStatus("Extracting assets...")</script>\n'
-
-        from reskin.extractor import extract as run_extract
-        manifest_path = await asyncio.to_thread(run_extract, config)
-
-        from reskin.utils import load_json
-        manifest = load_json(manifest_path)
-        assets = manifest["assets"]
-        total = len(assets)
-
-        yield f'<script>setStatus("Reskinning {total} assets with Lucy...")</script>\n'
-
-        # Generate each asset and stream the before/after card immediately
         from reskin.generator import get_backend
         from reskin.utils import load_image
 
         gen_backend = get_backend(config)
-        style_refs = []
+
+        # Find all textures for this character
+        textures = sorted(char_dir.glob("*.png"))
+        total = len(textures)
+
+        yield json.dumps({"type": "status", "message": f"Reskinning {character} ({total} textures)..."}) + "\n"
 
         def img_to_b64(img):
             buf = io.BytesIO()
             img.convert("RGB").save(buf, format="PNG")
             return base64.b64encode(buf.getvalue()).decode()
 
-        for i, asset in enumerate(assets):
-            rel = asset["relative_path"]
-            src_path = Path(asset["extracted_path"])
+        for i, tex_path in enumerate(textures):
+            tex_name = tex_path.stem.replace(f"{character}_", "")
 
-            yield f'<script>setStatus("Reskinning ({i+1}/{total}): {rel}...")</script>\n'
+            yield json.dumps({"type": "status", "message": f"({i+1}/{total}) {character} / {tex_name}..."}) + "\n"
 
             try:
-                source = load_image(src_path)
+                source = load_image(tex_path)
                 orig_b64 = img_to_b64(source)
 
+                asset_info = {"relative_path": str(tex_path.relative_to(demo_dir / "Content")), "category": "textures"}
                 result = await asyncio.to_thread(
-                    gen_backend.generate, source, style_prompt, style_refs, asset
+                    gen_backend.generate, source, style_prompt, [], asset_info
                 )
                 gen_b64 = img_to_b64(result)
 
-                safe_name = rel.replace("\\\\", "/").replace("'", "\\\\'")
-                yield f"<script>addCard('{safe_name}','{orig_b64}','{gen_b64}',{asset['width']},{asset['height']})</script>\n"
+                yield json.dumps({
+                    "type": "card",
+                    "character": character,
+                    "texture": tex_name,
+                    "width": source.width,
+                    "height": source.height,
+                    "original": orig_b64,
+                    "reskinned": gen_b64,
+                }) + "\n"
 
             except Exception as e:
-                yield f'<script>setStatus("Error on {rel}: {e}", "error")</script>\n'
+                yield json.dumps({"type": "status", "message": f"Error on {tex_name}: {e}", "cls": "error"}) + "\n"
 
-        yield f'<script>setStatus("Done! {total} assets reskinned.", "done")</script>\n'
-        yield '</body></html>'
+        yield json.dumps({"type": "done", "message": f"Done! {total} textures reskinned for {character}."}) + "\n"
 
-    return StreamingResponse(stream_gallery(), media_type="text/html")
-
-
-# ──────────────────────────────── WebSocket ────────────────────────────────
-
-
-@app.websocket("/ws/jobs/{job_id}")
-async def ws_job_progress(websocket: WebSocket, job_id: str):
-    """Stream live progress updates for a job."""
-    await websocket.accept()
-
-    job = get_job(job_id)
-    if not job:
-        await websocket.close(code=4004, reason="Job not found")
-        return
-
-    # Send current state immediately
-    await websocket.send_json(job.progress.model_dump())
-
-    queue = subscribe(job_id)
-    try:
-        while True:
-            update = await queue.get()
-            await websocket.send_json(update)
-            if update.get("status") in ("completed", "failed"):
-                break
-    except WebSocketDisconnect:
-        pass
-    finally:
-        unsubscribe(job_id, queue)
+    return StreamingResponse(stream_reskin(), media_type="application/x-ndjson")
