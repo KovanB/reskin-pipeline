@@ -26,9 +26,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure data dirs exist
-Path("data/jobs").mkdir(parents=True, exist_ok=True)
-Path("data/uploads").mkdir(parents=True, exist_ok=True)
+# Use /tmp on Vercel (serverless), data/ locally
+import os
+
+DATA_ROOT = Path(os.environ.get("DATA_DIR", "/tmp/reskin-data"))
+DATA_ROOT.mkdir(parents=True, exist_ok=True)
+(DATA_ROOT / "jobs").mkdir(parents=True, exist_ok=True)
+(DATA_ROOT / "uploads").mkdir(parents=True, exist_ok=True)
 
 
 # ──────────────────────────────── REST endpoints ────────────────────────────────
@@ -105,7 +109,7 @@ async def api_download(job_id: str) -> FileResponse:
 @app.post("/api/upload/project")
 async def api_upload_project(file: UploadFile = File(...)) -> dict:
     """Upload a zipped UE project (or Content/ folder) for processing."""
-    upload_dir = Path("data/uploads") / file.filename.replace(".zip", "")
+    upload_dir = DATA_ROOT / "uploads" / file.filename.replace(".zip", "")
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = upload_dir / file.filename

@@ -17,7 +17,9 @@ _jobs: dict[str, dict[str, Any]] = {}
 # WebSocket subscribers per job
 _subscribers: dict[str, list[asyncio.Queue]] = {}
 
-JOBS_DIR = Path("data/jobs")
+import os
+
+JOBS_DIR = Path(os.environ.get("DATA_DIR", "/tmp/reskin-data")) / "jobs"
 
 
 def _now() -> datetime:
