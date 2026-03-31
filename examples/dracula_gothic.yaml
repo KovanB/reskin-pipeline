@@ -1,0 +1,28 @@
+# Public Domain Skin: Dracula (Bram Stoker, 1897)
+name: "DraculaGothic"
+style_prompt: "Dracula gothic horror aesthetic, Transylvanian castle architecture, dark crimson and midnight purple palette, bat silhouettes, full moon skybox, cobblestone streets, iron gates, candelabras, fog and mist particles, gothic stained glass, Victorian horror style, blood red accents on black"
+author: "ReskinStudio"
+description: "Transforms Subway Surfers into a gothic Transylvania runner fleeing through moonlit castle corridors and misty graveyards"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+ue_project_path: "../test_project"
+output_dir: "../output/dracula_gothic"
+
+backend: "lucy"
+
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+quality:
+  strength: 0.85
+  guidance_scale: 8.5
+  steps: 35
+  output_format: "png"
+  preserve_pbr: true
+  tile_seam_fix: true
+  consistency_pass: true

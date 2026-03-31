@@ -1,0 +1,28 @@
+# Public Domain Skin: The Little Mermaid (Hans Christian Andersen, 1837)
+name: "LittleMermaid"
+style_prompt: "Little Mermaid underwater kingdom aesthetic, deep ocean blues and seafoam greens, coral reef architecture, seashell and pearl UI elements, bioluminescent jellyfish particles, sunlight rays filtering through water, treasure chest and shipwreck obstacles, iridescent fish scale textures, oceanic watercolor painting style, aquamarine and coral pink palette"
+author: "ReskinStudio"
+description: "Transforms Subway Surfers into an undersea runner swimming through coral kingdoms and sunken ships"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+ue_project_path: "../test_project"
+output_dir: "../output/little_mermaid"
+
+backend: "lucy"
+
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+quality:
+  strength: 0.80
+  guidance_scale: 8.0
+  steps: 35
+  output_format: "png"
+  preserve_pbr: true
+  tile_seam_fix: true
+  consistency_pass: true

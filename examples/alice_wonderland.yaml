@@ -1,0 +1,28 @@
+# Public Domain Skin: Alice in Wonderland (Lewis Carroll, 1865)
+name: "AliceWonderland"
+style_prompt: "Alice in Wonderland aesthetic, whimsical Victorian fantasy, playing card motifs, checkerboard patterns, oversized mushrooms, teacup and pocket watch details, pastel purple and teal color palette, storybook illustration style, Cheshire cat grins, Queen of Hearts red and gold accents"
+author: "ReskinStudio"
+description: "Transforms Subway Surfers into a Wonderland-themed runner with playing card guards, mushroom obstacles, and rabbit-hole tunnels"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+ue_project_path: "../test_project"
+output_dir: "../output/alice_wonderland"
+
+backend: "lucy"
+
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+quality:
+  strength: 0.80
+  guidance_scale: 8.0
+  steps: 35
+  output_format: "png"
+  preserve_pbr: true
+  tile_seam_fix: true
+  consistency_pass: true

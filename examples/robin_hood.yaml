@@ -1,0 +1,28 @@
+# Public Domain Skin: Robin Hood (English folklore)
+name: "RobinHood"
+style_prompt: "Robin Hood medieval forest aesthetic, Sherwood Forest deep greens and earthy browns, medieval English village, wooden architecture, archery targets, wanted posters, leaf and vine motifs, golden treasure coins, rustic hand-painted texture style, Lincoln green and brown leather palette"
+author: "ReskinStudio"
+description: "Transforms Subway Surfers into a Sherwood Forest runner dodging the Sheriff's guards, leaping over market carts, and collecting gold coins"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+ue_project_path: "../test_project"
+output_dir: "../output/robin_hood"
+
+backend: "lucy"
+
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+quality:
+  strength: 0.80
+  guidance_scale: 8.0
+  steps: 35
+  output_format: "png"
+  preserve_pbr: true
+  tile_seam_fix: true
+  consistency_pass: true

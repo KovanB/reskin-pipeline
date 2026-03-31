@@ -1,0 +1,28 @@
+# Public Domain Skin: The Wizard of Oz (L. Frank Baum, 1900)
+name: "WizardOfOz"
+style_prompt: "Wizard of Oz aesthetic, yellow brick road ground textures, emerald green Emerald City architecture, poppy field environments, tornado swirl particles, ruby red and emerald green color palette, whimsical painted storybook style, hot air balloon motifs, tin and straw material textures, rainbow skybox"
+author: "ReskinStudio"
+description: "Transforms Subway Surfers into an Oz-themed runner dashing down the Yellow Brick Road toward the Emerald City"
+version: "1.0.0"
+target_ue_version: "5.4"
+
+ue_project_path: "../test_project"
+output_dir: "../output/wizard_of_oz"
+
+backend: "lucy"
+
+categories:
+  - textures
+  - ui
+  - skyboxes
+  - particles
+  - materials
+
+quality:
+  strength: 0.80
+  guidance_scale: 8.0
+  steps: 35
+  output_format: "png"
+  preserve_pbr: true
+  tile_seam_fix: true
+  consistency_pass: true

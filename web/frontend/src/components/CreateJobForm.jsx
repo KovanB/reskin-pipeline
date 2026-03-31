@@ -12,6 +12,39 @@ const CATEGORIES = ["textures", "ui", "skyboxes", "particles", "materials"];
 
 const DEMO_CHARACTERS = ["Knight", "Mage", "Rogue", "Ranger", "Cleric"];
 
+const PUBLIC_DOMAIN_PRESETS = [
+  {
+    name: "AliceWonderland",
+    label: "Alice in Wonderland",
+    style_prompt: "Alice in Wonderland aesthetic, whimsical Victorian fantasy, playing card motifs, checkerboard patterns, oversized mushrooms, teacup and pocket watch details, pastel purple and teal color palette, storybook illustration style, Cheshire cat grins, Queen of Hearts red and gold accents",
+    description: "Wonderland-themed runner with playing card guards, mushroom obstacles, and rabbit-hole tunnels",
+  },
+  {
+    name: "RobinHood",
+    label: "Robin Hood",
+    style_prompt: "Robin Hood medieval forest aesthetic, Sherwood Forest deep greens and earthy browns, medieval English village, wooden architecture, archery targets, wanted posters, leaf and vine motifs, golden treasure coins, rustic hand-painted texture style, Lincoln green and brown leather palette",
+    description: "Sherwood Forest runner dodging the Sheriff's guards, leaping over market carts, and collecting gold coins",
+  },
+  {
+    name: "DraculaGothic",
+    label: "Dracula",
+    style_prompt: "Dracula gothic horror aesthetic, Transylvanian castle architecture, dark crimson and midnight purple palette, bat silhouettes, full moon skybox, cobblestone streets, iron gates, candelabras, fog and mist particles, gothic stained glass, Victorian horror style, blood red accents on black",
+    description: "Gothic Transylvania runner fleeing through moonlit castle corridors and misty graveyards",
+  },
+  {
+    name: "WizardOfOz",
+    label: "Wizard of Oz",
+    style_prompt: "Wizard of Oz aesthetic, yellow brick road ground textures, emerald green Emerald City architecture, poppy field environments, tornado swirl particles, ruby red and emerald green color palette, whimsical painted storybook style, hot air balloon motifs, tin and straw material textures, rainbow skybox",
+    description: "Oz-themed runner dashing down the Yellow Brick Road toward the Emerald City",
+  },
+  {
+    name: "LittleMermaid",
+    label: "The Little Mermaid",
+    style_prompt: "Little Mermaid underwater kingdom aesthetic, deep ocean blues and seafoam greens, coral reef architecture, seashell and pearl UI elements, bioluminescent jellyfish particles, sunlight rays filtering through water, treasure chest and shipwreck obstacles, iridescent fish scale textures, oceanic watercolor painting style, aquamarine and coral pink palette",
+    description: "Undersea runner swimming through coral kingdoms and sunken ships",
+  },
+];
+
 export default function CreateJobForm({ onCreated }) {
   const [form, setForm] = useState({
     name: "",
@@ -88,6 +121,28 @@ export default function CreateJobForm({ onCreated }) {
               <option key={b.value} value={b.value}>{b.label}</option>
             ))}
           </select>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Quick Start — Public Domain Skins</label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {PUBLIC_DOMAIN_PRESETS.map((preset) => (
+            <button
+              key={preset.name}
+              type="button"
+              className={`btn ${form.name === preset.name ? "btn-primary" : "btn-secondary"}`}
+              style={{ padding: "6px 14px", fontSize: 13 }}
+              onClick={() => setForm((f) => ({
+                ...f,
+                name: preset.name,
+                style_prompt: preset.style_prompt,
+                description: preset.description,
+              }))}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
       </div>
 
